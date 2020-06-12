@@ -4,6 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     WINEARCH=win64 \
     WINEDEBUG=fixme-all
 
+## BEGIN WINE INSTALLATION ##
 # Install dependencies needed for installation and using PPAs and Locales
 RUN apt-get -q update && \
     apt-get --no-install-recommends --no-install-suggests -y install \
@@ -38,6 +39,7 @@ RUN dpkg --add-architecture i386 && \
     winetricks --unattended dotnet472 corefonts dxvk && \
     apt-get clean autoclean && apt-get autoremove -y && rm -rf /var/lib/{apt,dpkg,cache,log}/
 
+## BEGIN STEAM INSTALLATION ##
 RUN echo steam steam/question select "I AGREE" | debconf-set-selections && \
     apt-get -q update && \
     apt-get -y install \
@@ -47,25 +49,34 @@ RUN echo steam steam/question select "I AGREE" | debconf-set-selections && \
     ln -s /usr/games/steamcmd /usr/bin/steamcmd && \
     apt-get clean autoclean && apt-get autoremove -y && rm -rf /var/lib/{apt,dpkg,cache,log}/
 
+## BEGIN USERSPACE SETUP ##
 # The following part was gladly adapted and extended
 # from https://github.com/bregell/docker_space_engineers_server/blob/38c7d3d8f2b6bdbfcfb45f84b3b2df1c128eb99f/Dockerfile
 # Licenced under MIT by Johan Bregell
-ENV WORK="/root/.wine/drive_c/SpaceEngineersDedicatedServer" \
-    CONFIG="/root/.wine/drive_c/users/root/AppData/Roaming/SpaceEngineersDedicated" \
-    SERVER_NAME=DockerDedicated \
-    WORLD_NAME=DockerWorld \
-    STEAM_PORT=8766 \
-    SERVER_PORT=27016 \
-    REMOTE_API_PORT=8080
+# Part of this is also inspired by Pterodactyl docker images.
 
 COPY entrypoint.sh /entrypoint.sh
-COPY resources/SpaceEngineers-Dedicated.cfg /home/root/SpaceEngineers-Dedicated.cfg
+RUN chmod 755 /entrypoint.sh
 
-RUN mkdir -p "${WORK}" && \
-    mkdir -p "${CONFIG}" && \
-    chmod +x /entrypoint.sh
+RUN useradd -m -d /home/container -s /bin/bash container
+USER container
+ENV HOME /home/container
 
-VOLUME ${WORK}
-WORKDIR ${WORK}
-ENTRYPOINT ["/entrypoint.sh"]
-EXPOSE ${STEAM_PORT}/udp ${SERVER_PORT}/udp ${REMOTE_API_PORT}/tcp
+ENV SE_WORKING_DIR="${HOME}/.wine/drive_c/SpaceEngineersDedicatedServer" \
+    SE_CONFIG_DIR="${HOME}/.wine/drive_c/users/container/AppData/Roaming/SpaceEngineersDedicated" \
+    SERVER_NAME=DockerDedicated \
+    SERVER_PORT=27016 \
+    SERVER_API_PORT=8080 \
+    STEAM_PORT=8766 \
+    WORLD_NAME=DockerWorld
+
+COPY resources/SpaceEngineers-Dedicated.cfg /etc/default/SpaceEngineers-Dedicated.cfg
+
+RUN mkdir -p "${SE_WORKING_DIR}" && \
+    mkdir -p "${SE_CONFIG_DIR}"
+
+#VOLUME ${SE_WORKING_DIR}
+WORKDIR ${SE_WORKING_DIR}
+
+CMD ["/bin/bash", "/entrypoint.sh"]
+EXPOSE ${STEAM_PORT}/udp ${SERVER_PORT}/udp ${SERVER_API_PORT}/tcp

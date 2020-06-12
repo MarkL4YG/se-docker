@@ -4,3 +4,6 @@ docker-compose.override.yml
 # Ignore any local files and folders that may be loaded by the user
 /*.local.*
 /*.local/
+
+# IntelliJ configuration files
+.idea/

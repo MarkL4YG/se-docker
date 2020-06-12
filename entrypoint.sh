@@ -5,21 +5,22 @@
 
 set -eo pipefail
 
-mkdir -p "${CONFIG}"/{Saves,Mods,Updater}
-if [[ -d "${WORK}"/"${WORLD_NAME}" ]]; then
+mkdir -p "${SE_WORKING_DIR}"
+mkdir -p "${SE_CONFIG_DIR}"/{Saves,Mods,Updater}
+if [[ -d "${SE_WORKING_DIR}"/"${WORLD_NAME}" ]]; then
   cp -r --reflink=auto --no-preserve=ownership \
-    "${WORK}"/"${WORLD_NAME}" "${CONFIG}"/Saves/
+    "${SE_WORKING_DIR}"/"${WORLD_NAME}" "${SE_CONFIG_DIR}"/Saves/
 fi
 
-if [[ ! -s "${CONFIG}"/SpaceEngineers-Dedicated.cfg ]]; then
+if [[ ! -s "${SE_CONFIG_DIR}"/SpaceEngineers-Dedicated.cfg ]]; then
   # Upsert a default configuration with sane defaults for this containerized environment.
-  : ${WORLD_SAVE_WINE_PATH:="C:\\\users\\\root\\\AppData\\\Roaming\\\SpaceEngineersDedicated\\\Saves\\"}
+  : ${WORLD_SAVE_WINE_PATH:="C:\\\users\\\container\\\AppData\\\Roaming\\\SpaceEngineersDedicated\\\Saves\\"}
   : ${PREMADE_WINE_PATH:="C:\\\SpaceEngineersDedicatedServer\\\Content\\\CustomWorlds\\\Star System"}
 
   declare -A defaults=(
     [SteamPort]="${STEAM_PORT}"
     [ServerPort]="${SERVER_PORT}"
-    [RemoteApiPort]="${REMOTE_API_PORT}"
+    [RemoteApiPort]="${SERVER_API_PORT}"
     [RemoteSecurityKey]="${REMOTE_SECURITY_KEY}"
     [ServerName]="${SERVER_NAME}"
     [WorldName]="${WORLD_NAME}"
@@ -32,12 +33,12 @@ if [[ ! -s "${CONFIG}"/SpaceEngineers-Dedicated.cfg ]]; then
     modifications+=("-e" "s#<${tag}>.*</${tag}>#<${tag}>${defaults[$tag]}</${tag}>#g")
   done
 
-  </home/root/SpaceEngineers-Dedicated.cfg sed "${modifications[@]}" >"${CONFIG}"/SpaceEngineers-Dedicated.cfg
+  <"/etc/default/SpaceEngineers-Dedicated.cfg" sed "${modifications[@]}" >"${SE_CONFIG_DIR}"/SpaceEngineers-Dedicated.cfg
 fi
 
 steamcmd \
   +login anonymous \
-  +force_install_dir "${WORK}" \
+  +force_install_dir "${SE_WORKING_DIR}" \
   +app_update 298740 \
   +quit
 
@@ -47,9 +48,15 @@ steamcmd \
 
 # Change the working directory to the directory containing the steam binaries,
 # otherwise the game server won't start.
-cd "${WORK}/DedicatedServer64"
+cd "${SE_WORKING_DIR}/DedicatedServer64"
 
-exec wine64 \
-  SpaceEngineersDedicated.exe \
-  -noconsole -ignorelastsession \
-  -ip "${SERVER_IP}" -path "$(winepath -w "${CONFIG}")"
+if [[ -z "$STARTUP" ]]; then
+    STARTUP="wine64 SpaceEngineersDedicated.exe -noconsole -ignorelastsession -ip \"${SERVER_IP}\" -path \"$(winepath -w "${SE_CONFIG_DIR}")\""
+fi
+
+# Replace Startup Variables
+MODIFIED_STARTUP=$(eval echo $(echo ${STARTUP} | sed -e 's/{{/${/g' -e 's/}}/}/g'))
+echo ":$(pwd)$ ${MODIFIED_STARTUP}"
+
+# Run the Server
+eval ${MODIFIED_STARTUP}
